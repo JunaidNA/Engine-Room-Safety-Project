@@ -11,10 +11,10 @@ void loop() {
         incomingChar = Serial.read();  // Read the incoming character
 
         // Check the received character
-        if (incomingChar == 'G') {
+        if (incomingChar == 'A') {
             digitalWrite(LED_BUILTIN, LOW);  // Turn ON LED (Active LOW)
             Serial.println("LED turned ON");
-        } else if (incomingChar == 'N') {
+        } else if (incomingChar == 'Z') {
             digitalWrite(LED_BUILTIN, HIGH);  // Turn OFF LED
             Serial.println("LED turned OFF");
         }
