@@ -3,7 +3,6 @@
 void setup() {
  Serial.begin(9600);
  pinMode(MQ4_PIN, INPUT);
- Serial.println("MQ-4 Gas Detector Ready");
 }
 
 void loop() {
