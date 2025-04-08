@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity >=0.5.0 <0.8.0;
+
+contract Factory {
+    // --- Exercise 2 ---
+    uint idDigits = 16;
+
+    // --- Exercise 3 ---
+    uint idModulus = 10 ** idDigits;
+
+    // --- Exercise 4 ---
+    struct Product {
+        string name;
+        uint id;
+    }
+
+    // --- Exercise 5 ---
+    Product[] public products;
+
+    // --- Exercise 9 ---
+    event NewProduct(uint ArrayProductId, string name, uint id);
+
+    // --- Exercise 10 ---
+    mapping(uint => address) public productToOwner;
+    mapping(address => uint) ownerProductCount;
+
+    // --- Exercise 14 ---
+    mapping(uint => uint) public age; // Maps userID to their age
+
+    // Optional setter for testing age values
+    function setAge(uint _userId, uint _age) public {
+        age[_userId] = _age;
+    }
+
+    // Modifier that checks if a user is older than the required age
+    modifier olderThan(uint _age, uint _userId) {
+        require(age[_userId] >= _age, "User is not old enough");
+        _;
+    }
+
+    // Function using the modifier to validate user age
+    function validationUsers(uint _userId) public view olderThan(18, _userId) {
+        // This function only checks age; intentionally left empty
+    }
+
+    // --- Exercises 6, 9, 10, 11 ---
+    function _createProduct(string memory _name, uint _id) private {
+        products.push(Product(_name, _id));
+        uint productId = products.length - 1;
+
+        productToOwner[productId] = msg.sender;
+        ownerProductCount[msg.sender]++;
+
+        emit NewProduct(productId, _name, _id);
+    }
+
+    // --- Exercises 7 & 8 ---
+    function _generateRandomId(string memory _str) private view returns (uint) {
+        uint rand = uint(keccak256(abi.encodePacked(_str)));
+        return rand % idModulus;
+    }
+
+    // --- Exercise 8 ---
+    function createRandomProduct(string memory _name) public {
+        uint randId = _generateRandomId(_name);
+        _createProduct(_name, randId);
+    }
+
+    // --- Exercise 11 ---
+    function Ownership(uint productId) public {
+        productToOwner[productId] = msg.sender;
+        ownerProductCount[msg.sender]++;
+    }
+
+    // --- Exercise 12 ---
+    function getProductsByOwner(address _owner) external view returns (uint[] memory) {
+        uint count = 0;
+        uint[] memory result = new uint[](ownerProductCount[_owner]);
+
+        for (uint i = 0; i < products.length; i++) {
+            if (productToOwner[i] == _owner) {
+                result[count] = i;
+                count++;
+            }
+        }
+
+        return result;
+    }
+}
