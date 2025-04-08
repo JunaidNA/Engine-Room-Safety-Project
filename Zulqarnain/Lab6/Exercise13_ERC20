@@ -1,0 +1,5 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20; 
+
+// Exercise 13 - Import Code from OpenZeppelin Directory and make new .sol file. 
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
