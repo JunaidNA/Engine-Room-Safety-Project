@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract EngineRoomSafetyLog {
+    address public owner;
+    uint public incidentCount = 0;
+
+    struct Incident {
+        uint id;
+        string eventType;
+        string message;
+        uint timestamp;
+    }
+
+    mapping(uint => Incident) public incidents;
+    Incident[] public allIncidents;
+
+    event IncidentLogged(uint id, string eventType, string message, uint timestamp);
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function logIncident(string memory _eventType, string memory _message) public {
+        incidentCount++;
+        Incident memory newIncident = Incident(incidentCount, _eventType, _message, block.timestamp);
+        incidents[incidentCount] = newIncident;
+        allIncidents.push(newIncident);
+        emit IncidentLogged(incidentCount, _eventType, _message, block.timestamp);
+    }
+
+    function getIncident(uint _id) public view returns (Incident memory) {
+        return incidents[_id];
+    }
+
+    function getAllIncidents() public view returns (Incident[] memory) {
+        return allIncidents;
+    }
+}
