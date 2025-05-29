@@ -1,0 +1,184 @@
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// === Pin Definitions ===
+#define FLAME_SENSOR_PIN D1
+#define TEMP_SENSOR_PIN D2
+#define BUZZER_PIN D3
+#define SMOKE_SENSOR_PIN A0
+#define RELAY_PIN D6
+#define RED_LED_PIN D8
+#define BLUE_LED_PIN D7
+
+// === Thresholds ===
+#define FLAME_DETECTED HIGH 
+#define TEMP_THRESHOLD 30.0
+#define SMOKE_THRESHOLD 400
+#define DEVICE_DISCONNECTED_C -127.0  // For DS18B20 error detection
+
+// === WiFi Credentials ===
+const char* ssid = "Wifi SSID Name";
+const char* password = "Wifi Password";
+
+// === MQTT Broker ===
+const char* mqtt_server = "test.mosquitto.org";
+const char* mqtt_topic = "engine_room/status";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// === DS18B20 Setup ===
+OneWire oneWire(TEMP_SENSOR_PIN);
+DallasTemperature sensors(&oneWire);
+
+// === Function to validate flame detection ===
+bool isFlameDetected() {
+  int count = 0;
+  for (int i = 0; i < 5; i++) {
+    if (digitalRead(FLAME_SENSOR_PIN) == FLAME_DETECTED) {
+      count++;
+    }
+    delay(10);
+  }
+  return count >= 4;
+}
+
+void setup() {
+  pinMode(FLAME_SENSOR_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(RED_LED_PIN, OUTPUT);
+  pinMode(BLUE_LED_PIN, OUTPUT);
+
+  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(RELAY_PIN, LOW);
+  digitalWrite(RED_LED_PIN, LOW);
+  digitalWrite(BLUE_LED_PIN, HIGH);
+
+  Serial.begin(9600);
+  delay(3000);
+  Serial.println("\n\n🚨 Engine Room System Starting...");
+
+  sensors.begin();
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+}
+
+void loop() {
+  if (!client.connected()) reconnect_mqtt();
+  client.loop();
+
+  bool flameDetected = isFlameDetected();
+  sensors.requestTemperatures();
+  float temperature = sensors.getTempCByIndex(0);
+  int smokeValue = analogRead(SMOKE_SENSOR_PIN);
+  float smokePercent = (smokeValue / 1023.0) * 100;
+
+  bool tempHigh = false;
+  bool smokeDetected = false;
+  bool redAlert = false;
+  String status = "";
+
+  // === FLAME ===
+  Serial.print("Flame Sensor Raw (stable): ");
+  Serial.println(flameDetected ? "LOW (FLAME)" : "HIGH (NO FLAME)");
+  if (flameDetected) {
+    redAlert = true;
+    status += "🔥 Flame Detected! ";
+  } else {
+    status += "No Flame. ";
+  }
+
+  // === TEMP ===
+  if (temperature == DEVICE_DISCONNECTED_C) {
+    Serial.println("⚠️ Temperature sensor not responding!");
+    status += "⚠️ Temp Sensor Error. ";
+  } else if (temperature > TEMP_THRESHOLD) {
+    tempHigh = true;
+    redAlert = true;
+    status += "🌡️ High Temp: " + String(temperature) + "°C. ";
+  } else {
+    status += "Normal Temp: " + String(temperature) + "°C. ";
+  }
+
+  // === SMOKE ===
+  if (smokeValue > SMOKE_THRESHOLD) {
+    smokeDetected = true;
+    redAlert = true;
+    status += "💨 Smoke: " + String(smokePercent) + "%. ";
+  } else {
+    status += "Smoke Normal: " + String(smokePercent) + "%. ";
+  }
+
+  // === RED LED & RELAY ===
+  digitalWrite(RED_LED_PIN, redAlert ? HIGH : LOW);
+  digitalWrite(BLUE_LED_PIN, redAlert ? LOW : HIGH);
+  digitalWrite(RELAY_PIN, smokeDetected ? HIGH : LOW);
+
+  // === BUZZER ===
+  if (flameDetected) playTone(1000, 200);
+  else if (tempHigh) playTone(1500, 300);
+  else if (smokeDetected) playTone(2000, 500);
+  else noTone(BUZZER_PIN);
+
+  // === SERIAL OUTPUT ===
+  Serial.println("----- Engine Room Readings -----");
+  Serial.println("Temperature: " + String(temperature) + "°C");
+  Serial.println("Smoke: " + String(smokeValue) + " (" + String(smokePercent) + "%)");
+  Serial.println("Flame: " + String(flameDetected ? "FLAME DETECTED" : "No Flame"));
+  Serial.println(status);
+  Serial.println("---------------------------------");
+
+  // === MQTT PUBLISH ===
+  // Publish JSON payload
+  char payload[128];
+  snprintf(payload, sizeof(payload),
+         "{\"Temperature\":%.1f,\"smoke\":%.1f,\"flame\":\"%s\"}",
+         temperature, smokePercent, flameDetected ? "FIRE" : "No_Flame");
+
+  client.publish(mqtt_topic, payload);
+  delay(2000);
+}
+
+void setup_wifi() {
+  delay(100);
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n✅ WiFi connected");
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\n❌ WiFi failed to connect");
+  }
+}
+
+void reconnect_mqtt() {
+  while (!client.connected()) {
+    Serial.print("Connecting to MQTT...");
+    if (client.connect("ESP8266_EngineRoom")) {
+      Serial.println("connected.");
+      client.publish(mqtt_topic, "ESP8266 reconnected");
+    } else {
+      Serial.print("Failed, rc=");
+      Serial.println(client.state());
+      delay(2000);
+    }
+  }
+}
+
+void playTone(int freq, int duration) {
+  tone(BUZZER_PIN, freq);
+  delay(duration);
+  noTone(BUZZER_PIN);
+}
